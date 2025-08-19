@@ -21,7 +21,7 @@ export default function Header({
             <div className="flex-shrink-0">
               <button onClick={onGoHome} className="text-left">
                 <span className="font-bold text-lg text-indigo-700 dark:text-indigo-300">
-                  AI News Portal
+                  AI NEWS
                 </span>
               </button>
             </div>
