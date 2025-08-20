@@ -6,7 +6,7 @@ import NewsCard from "./components/newscard";
 import SkeletonCard from "./components/skeletoncard";
 import EmptyState from "./components/emptystate";
 import PopularList from "./components/popularlist";
-import SortControls from "./components/SortControls";
+import SortControls from "./components/sortcontrols";
 import { DEFAULT_TOPICS } from "./lib/utils";
 import { fetchCombined, fetchPopularAI } from "./lib/api";
 import { motion, AnimatePresence } from "framer-motion";
