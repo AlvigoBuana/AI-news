@@ -6,7 +6,7 @@ import NewsCard from "./components/newscard";
 import SkeletonCard from "./components/skeletoncard";
 import EmptyState from "./components/emptystate";
 import PopularList from "./components/popularlist";
-import SortControls from "./components/sortcontrols";
+import SortControls from "./components/SortControls";
 import { DEFAULT_TOPICS } from "./lib/utils";
 import { fetchCombined, fetchPopularAI } from "./lib/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,6 +19,7 @@ function deduplicateArticles(articles) {
   });
 }
 
+const FOUR_MAIN_TOPICS = ["Machine Learning", "LLMs", "Generative AI", "Robotics"];
 const TOPICS_WITH_ALL = ["All News", ...DEFAULT_TOPICS];
 const INITIAL_TOPIC = "All News";
 
@@ -37,9 +38,6 @@ export default function App() {
     if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
       return localStorage.getItem('theme');
     }
-    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
     return 'light';
   });
 
@@ -57,7 +55,7 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [theme]);
-
+  
   const [isHomeView, setIsHomeView] = useState(true);
   const [sortBy, setSortBy] = useState('newest');
   const [query, setQuery] = useState("");
@@ -77,10 +75,11 @@ export default function App() {
     try {
       const popularNews = await fetchPopularAI(5);
       setPopular(popularNews);
-      const batches = await Promise.allSettled(DEFAULT_TOPICS.map((t) => fetchCombined(t, 10)));
-      let all = batches.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
-      const uniqueInitialArticles = deduplicateArticles(all);
+
+      const initialArticles = await fetchCombined("AI OR technology", 15);
+      const uniqueInitialArticles = deduplicateArticles(initialArticles);
       uniqueInitialArticles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+      
       setArticles(uniqueInitialArticles);
       setTopicCache(prevCache => new Map(prevCache).set("All News_newest", uniqueInitialArticles));
     } catch (e) {
@@ -91,16 +90,24 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    fetchInitialNews();
+  }, [fetchInitialNews]);
+
   const handleTopicFilter = useCallback(async (topic, sort = 'newest') => {
     setIsHomeView(false);
     setActiveTopic(topic);
+    setQuery("");
     setSortBy(sort);
     setPage(1);
+    
     const cacheKey = `${topic}_${sort}`;
     if (topicCache.has(cacheKey)) {
       setArticles(topicCache.get(cacheKey));
       return;
     }
+
+    setArticles([]);
     setLoading(true);
     setError("");
     try {
@@ -122,15 +129,18 @@ export default function App() {
   const runSearch = useCallback(async (q, sort = 'newest') => {
     const keyword = q?.trim();
     if (!keyword) return;
+
     setIsHomeView(false);
     setActiveTopic('');
     setQuery(keyword);
     setSortBy(sort);
     setPage(1);
+    setArticles([]);
     setLoading(true);
     setError("");
+
     try {
-      const searchResult = await fetchCombined(keyword, 40, sort);
+      const searchResult = await fetchCombined(keyword, 25, sort);
       const uniqueArticles = deduplicateArticles(searchResult);
       if (sort === 'newest') {
         uniqueArticles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
@@ -144,19 +154,17 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchInitialNews();
-  }, [fetchInitialNews]);
-
-  // --- PERBAIKAN DI SINI ---
   const handleGoHome = () => {
     setIsHomeView(true);
     setActiveTopic(INITIAL_TOPIC);
     setQuery("");
     setSortBy('newest');
     setPage(1);
-    // Hapus pengecekan cache. Selalu panggil fetchInitialNews().
-    fetchInitialNews();
+    if (topicCache.has("All News_newest")) {
+      setArticles(topicCache.get("All News_newest"));
+    } else {
+      fetchInitialNews();
+    }
   };
   
   const handleSortChange = (newSortOrder) => {
@@ -166,9 +174,13 @@ export default function App() {
       handleTopicFilter(activeTopic, newSortOrder);
     }
   };
+  
+  const handleLoadMore = () => {
+    setPage(p => p + 1);
+  };
 
   const articlesToShow = articles.slice(0, page * pageSize);
-  const hasMoreArticles = articles.length > page * pageSize;
+  const hasMoreArticles = articles.length > articlesToShow.length;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 dark:bg-gradient-to-r dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 dark:bg-[length:400%_400%] dark:animate-gradient">
@@ -189,7 +201,7 @@ export default function App() {
         </section>
       )}
 
-      <main className={`max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 ${isHomeView ? 'lg:grid-cols-4' : ''} gap-6`}>
+      <main className={`max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 ${isHomeView ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6`}>
         <div className={isHomeView ? 'lg:col-span-3 space-y-6' : 'col-span-full space-y-6'}>
           <div className="my-8">
             <TopicChips topics={TOPICS_WITH_ALL} active={activeTopic} onPick={handleTopicFilter} />
@@ -208,27 +220,39 @@ export default function App() {
             <h2 className="text-2xl font-bold pt-4 border-t border-zinc-200 dark:border-zinc-800 pl-4 border-l-4 border-indigo-500">Latest News</h2>
           )}
 
-          {error && (<div className="max-w-3xl mx-auto bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl">{error}</div>)}
+          {error && (<div className="max-w-3xl mx-auto bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl">{error}</div>)}
           
-          <motion.section
-            className={gridCols}
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <AnimatePresence>
-              {loading && articlesToShow.length === 0
-                ? Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={`skel-${i}`} />)
-                : articlesToShow.length > 0
-                ? articlesToShow.map((item) => <NewsCard key={item.url} item={item} />)
-                : !loading && (<EmptyState message="No results found." />)}
-            </AnimatePresence>
-          </motion.section>
+          {loading && articles.length === 0 ? (
+            isHomeView ? (
+              <motion.section className={gridCols}>
+                {Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={`skel-load-${i}`} />)}
+              </motion.section>
+            ) : (
+              <div className="col-span-full text-center py-16">
+                <div className="text-6xl mb-4 animate-pulse">🛰️</div>
+                <h3 className="text-lg font-semibold mb-1">Searching for relevant news...</h3>
+                <p className="text-zinc-500">Please wait a moment.</p>
+              </div>
+            )
+          ) : (
+            <motion.section
+              className={gridCols}
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <AnimatePresence>
+                {articlesToShow.length > 0
+                  ? articlesToShow.map((item) => <NewsCard key={item.url} item={item} />)
+                  : !loading && (<EmptyState message="No results found." />)}
+              </AnimatePresence>
+            </motion.section>
+          )}
 
           {hasMoreArticles && (
-            <div className="flex justify-center pt-4">
-              <button onClick={() => setPage((p) => p + 1)} disabled={loading} className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-medium shadow hover:bg-indigo-700 disabled:opacity-60 transition-transform active:scale-95">
-                {loading ? "Loading..." : "Load More"}
+            <div className="flex justify-center pt-8">
+              <button onClick={handleLoadMore} disabled={loading} className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-medium shadow hover:bg-indigo-700 disabled:opacity-60 transition-transform active:scale-95">
+                {loading ? "Loading More..." : "Load More"}
               </button>
             </div>
           )}
@@ -245,7 +269,7 @@ export default function App() {
       <footer className="mt-10 border-t border-zinc-200 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 py-6 text-sm text-zinc-500 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} AI News Portal</p>
-          <p>Sources: Mediastack · NewsAPI · The Guardian</p>
+          <p>Sources: NewsAPI · The Guardian · GNews · NewsData · Currents</p>
         </div>
       </footer>
     </div>
