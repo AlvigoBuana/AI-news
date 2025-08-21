@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SearchBar from "./searchbar";
 
 export default function Header({
@@ -21,7 +21,7 @@ export default function Header({
             <div className="flex-shrink-0">
               <button onClick={onGoHome} className="text-left">
                 <span className="font-bold text-lg text-indigo-700 dark:text-indigo-300">
-                  AI NEWS
+                  AI News Portal
                 </span>
               </button>
             </div>
@@ -75,6 +75,7 @@ export default function Header({
                 </div>
               </>
             )}
+            
             {isSearchVisible && (
               <div className="flex items-center w-full gap-2">
                 <div className="flex-1">
@@ -83,6 +84,8 @@ export default function Header({
                       onChange={onSearchChange}
                       onSearch={onSearch}
                       loading={loading}
+                      // --- PERUBAHAN DI SINI: Tombol search di dalam komponen disembunyikan ---
+                      hideButton={true} 
                    />
                 </div>
                 <button 

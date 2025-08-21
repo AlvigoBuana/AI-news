@@ -19,7 +19,6 @@ function deduplicateArticles(articles) {
   });
 }
 
-const FOUR_MAIN_TOPICS = ["Machine Learning", "LLMs", "Generative AI", "Robotics"];
 const TOPICS_WITH_ALL = ["All News", ...DEFAULT_TOPICS];
 const INITIAL_TOPIC = "All News";
 
@@ -69,19 +68,31 @@ export default function App() {
   const pageSize = 12;
   const gridCols = useMemo(() => `grid gap-6 sm:grid-cols-2 ${isHomeView ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`, [isHomeView]);
 
-  const fetchInitialNews = useCallback(async () => {
+  // FUNGSI INI DIPERBARUI untuk menerima nomor halaman
+  const fetchInitialNews = useCallback(async (pageNum = 1) => {
     setLoading(true);
     setError("");
     try {
-      const popularNews = await fetchPopularAI(5);
-      setPopular(popularNews);
+      // Hanya fetch popular news di halaman pertama saja
+      if (pageNum === 1) {
+        const popularNews = await fetchPopularAI(5);
+        setPopular(popularNews);
+      }
 
-      const initialArticles = await fetchCombined("AI OR technology", 15);
+      // Gunakan pageNum untuk mengambil halaman data yang benar
+      const initialArticles = await fetchCombined("AI OR technology", 15, 'newest', pageNum);
       const uniqueInitialArticles = deduplicateArticles(initialArticles);
       uniqueInitialArticles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
       
-      setArticles(uniqueInitialArticles);
-      setTopicCache(prevCache => new Map(prevCache).set("All News_newest", uniqueInitialArticles));
+      // Jika halaman 1, ganti total artikel. Jika lebih, tambahkan ke yang sudah ada.
+      if (pageNum === 1) {
+        setArticles(uniqueInitialArticles);
+        setTopicCache(prevCache => new Map(prevCache).set("All News_newest", uniqueInitialArticles));
+      } else {
+        setArticles(prev => deduplicateArticles([...prev, ...uniqueInitialArticles]));
+      }
+      setPage(pageNum);
+
     } catch (e) {
       setError("Failed to fetch initial headlines.");
       console.error(e);
@@ -91,7 +102,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchInitialNews();
+    fetchInitialNews(1);
   }, [fetchInitialNews]);
 
   const handleTopicFilter = useCallback(async (topic, sort = 'newest') => {
@@ -160,11 +171,7 @@ export default function App() {
     setQuery("");
     setSortBy('newest');
     setPage(1);
-    if (topicCache.has("All News_newest")) {
-      setArticles(topicCache.get("All News_newest"));
-    } else {
-      fetchInitialNews();
-    }
+    fetchInitialNews(1); // Selalu fetch ulang halaman pertama saat ke home
   };
   
   const handleSortChange = (newSortOrder) => {
@@ -175,8 +182,16 @@ export default function App() {
     }
   };
   
+  // FUNGSI INI DIPERBARUI agar bisa memanggil API baru di homepage
   const handleLoadMore = () => {
-    setPage(p => p + 1);
+    const nextPage = page + 1;
+    // Jika di halaman utama, panggil API untuk halaman selanjutnya
+    if (isHomeView) {
+      fetchInitialNews(nextPage);
+    } else {
+      // Jika di halaman search/filter, lakukan client-side pagination
+      setPage(nextPage);
+    }
   };
 
   const articlesToShow = articles.slice(0, page * pageSize);
